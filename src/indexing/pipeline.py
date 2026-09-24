@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from src.models import Document, Chunk
-from src.chunking.factory import get_chunker, ChunkingStrategy
-from src.indexing.embeddings import embed_texts
-from src.indexing.vector_store import VectorStore
+from src.chunking.factory import ChunkingStrategy, get_chunker
 from src.indexing.bm25_index import BM25Index
 from src.indexing.deduplication import deduplicate_chunks
+from src.indexing.embeddings import embed_texts
+from src.indexing.vector_store import VectorStore
+from src.models import Chunk, Document
 
 
 class IndexingPipeline:

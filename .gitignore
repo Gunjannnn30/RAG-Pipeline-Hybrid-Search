@@ -4,6 +4,7 @@ chroma_db/
 bm25_index.pkl
 eval_results/
 comparison_results/
+cloudflared.exe
 
 # Python
 __pycache__/

@@ -4,10 +4,9 @@ from dataclasses import dataclass
 
 import httpx
 
-from src.config import OLLAMA_BASE_URL, GENERATION_MODEL
+from src.config import GENERATION_MODEL, OLLAMA_BASE_URL
 from src.evaluation.dataset import EvalCase
 from src.generation.pipeline import GenerationResult
-
 
 CORRECTNESS_PROMPT = """Compare the generated answer against the gold (reference) answer.
 Rate correctness on a scale of 0-10. Only respond with a single integer.

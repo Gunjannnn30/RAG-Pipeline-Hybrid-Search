@@ -1,8 +1,8 @@
 import tempfile
 from pathlib import Path
 
-from src.ingestion.loader import load_file, load_directory, _normalize_text
 from src.ingestion.enterprise_loader import load_enterprise_dataset
+from src.ingestion.loader import _normalize_text, load_directory, load_file
 
 
 def test_normalize_text():

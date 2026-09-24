@@ -4,10 +4,10 @@ from dataclasses import dataclass
 
 import httpx
 
-from src.config import OLLAMA_BASE_URL, GENERATION_MODEL
-from src.retrieval.dense import RetrievalResult
+from src.config import GENERATION_MODEL, OLLAMA_BASE_URL, RRF_DENSE_WEIGHT, RRF_SPARSE_WEIGHT
 from src.generation.citations import CitationResult
 from src.generation.prompts import CONFIDENCE_PROMPT
+from src.retrieval.dense import RetrievalResult
 
 
 @dataclass
@@ -46,10 +46,13 @@ class ConfidenceScorer:
         if not chunks:
             return 0.0
         scores = [c.score for c in chunks]
-        # Normalize: reranker scores are 0-10, RRF scores are small floats
         max_score = max(scores)
         if max_score > 1.0:
-            normalized = [s / 10.0 for s in scores]
+            normalized = [min(max(s / 10.0, 0.0), 1.0) for s in scores]
+        elif max_score > 0 and max_score < 0.05:
+            # RRF score normalization: max possible rank 1 is (w_dense + w_sparse)/61
+            max_possible_rrf = (RRF_DENSE_WEIGHT + RRF_SPARSE_WEIGHT) / 61.0
+            normalized = [min(max(s / max_possible_rrf, 0.0), 1.0) for s in scores]
         else:
             normalized = scores
         return sum(normalized) / len(normalized)

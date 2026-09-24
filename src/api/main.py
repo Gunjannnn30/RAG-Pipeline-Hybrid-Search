@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
+from src.api.dependencies import get_app_state
 from src.api.schemas import (
     AskRequest,
     AskResponse,
@@ -17,10 +21,10 @@ from src.api.schemas import (
     IngestRequest,
     IngestResponse,
 )
-from src.api.dependencies import get_app_state
 from src.config import OLLAMA_BASE_URL
-from src.ingestion.enterprise_loader import load_enterprise_dataset
 from src.indexing.pipeline import IndexingPipeline
+from src.ingestion.enterprise_loader import load_enterprise_dataset
+from src.ingestion.loader import load_uploaded_file
 
 
 @asynccontextmanager
@@ -31,11 +35,19 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="RAG Pipeline API",
-    description="Hybrid search RAG with citation verification over internal docs",
+    title="RAG with Hybrid Search API",
+    description="High-performance hybrid dense+BM25 search, parallel reranking, and citation verification",
     version="1.0.0",
     lifespan=lifespan,
 )
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+    @app.get("/app", response_class=FileResponse)
+    def serve_react_app():
+        return FileResponse(str(STATIC_DIR / "index.html"))
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -69,7 +81,7 @@ def ask_question(request: AskRequest):
 
     try:
         if request.retrieval_mode == "hybrid":
-            result = pipeline.ask(request.question)
+            result = pipeline.ask(request.question, use_reranker=request.use_reranker)
             return _format_response(result)
 
         if request.retrieval_mode == "dense":
@@ -138,6 +150,59 @@ def ingest_documents(request: IngestRequest):
     state.reload()
 
     return IngestResponse(**stats)
+
+
+@app.post("/v1/upload", response_model=IngestResponse)
+async def upload_documents(
+    files: list[UploadFile] = File(...),
+    chunking_strategy: str = Form("recursive"),
+):
+    """Upload custom files (PDF, Markdown, Text, HTML) and index them."""
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided.")
+
+    valid_strategies = ["recursive", "fixed_size", "semantic"]
+    if chunking_strategy not in valid_strategies:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid chunking strategy '{chunking_strategy}'. Must be one of {valid_strategies}",
+        )
+
+    documents = []
+    for file in files:
+        content_bytes = await file.read()
+        if not content_bytes:
+            continue
+        try:
+            doc = load_uploaded_file(file.filename, content_bytes)
+            documents.append(doc)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to process '{file.filename}': {e}")
+
+    if not documents:
+        raise HTTPException(status_code=400, detail="No valid document content could be extracted.")
+
+    indexer = IndexingPipeline(strategy=chunking_strategy)
+    stats = indexer.run(documents)
+
+    state = get_app_state()
+    state.reload()
+
+    return IngestResponse(**stats)
+
+
+@app.post("/v1/clear")
+def clear_knowledge_base():
+    """Reset both ChromaDB vector store and BM25 index."""
+    state = get_app_state()
+    state.vector_store.reset()
+    state.bm25_index.clear()
+    state.reload()
+    return {
+        "status": "ok",
+        "message": "Knowledge base reset successfully.",
+        "indexed_chunks": state.vector_store.count(),
+    }
 
 
 def _format_response(result) -> AskResponse:

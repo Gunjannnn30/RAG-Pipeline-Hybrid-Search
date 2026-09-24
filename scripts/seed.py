@@ -1,14 +1,15 @@
 """Seed script: pull Ollama models and index a sample of the dataset."""
 
-import subprocess
-import sys
+import os
 import time
 
 import httpx
 
-OLLAMA_BASE_URL = "http://localhost:11434"
-MODELS = ["llama3", "nomic-embed-text"]
-SEED_DOCS = 200
+from src.config import EMBEDDING_MODEL, GENERATION_MODEL
+
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+MODELS = [EMBEDDING_MODEL, GENERATION_MODEL]
+SEED_DOCS = int(os.environ.get("SEED_DOCS", "50"))
 
 
 def wait_for_ollama(max_retries: int = 30) -> None:
@@ -41,8 +42,8 @@ def pull_models() -> None:
 
 
 def seed_index() -> None:
-    from src.ingestion.enterprise_loader import load_enterprise_dataset
     from src.indexing.pipeline import IndexingPipeline
+    from src.ingestion.enterprise_loader import load_enterprise_dataset
 
     print(f"Loading {SEED_DOCS} documents...")
     docs = load_enterprise_dataset(max_docs=SEED_DOCS)

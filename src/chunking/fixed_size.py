@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from src.config import CHUNK_SIZE, CHUNK_OVERLAP
-from src.models import Chunk, Document
 from src.chunking.base import BaseChunker
+from src.config import CHUNK_OVERLAP, CHUNK_SIZE
+from src.models import Chunk, Document
 
 
 class FixedSizeChunker(BaseChunker):

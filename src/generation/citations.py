@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-import re
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+import re
 
 import httpx
 
-from src.config import OLLAMA_BASE_URL, GENERATION_MODEL
-from src.retrieval.dense import RetrievalResult
+from src.config import GENERATION_MODEL, OLLAMA_BASE_URL
 from src.generation.prompts import CITATION_VERIFY_PROMPT
+from src.retrieval.dense import RetrievalResult
+
+_client = httpx.Client(timeout=30.0, limits=httpx.Limits(max_keepalive_connections=10, max_connections=20))
 
 
 @dataclass
@@ -19,33 +22,39 @@ class CitationResult:
 
 
 class CitationVerifier:
-    def __init__(self, model: str = GENERATION_MODEL):
+    def __init__(self, model: str = GENERATION_MODEL, max_workers: int = 6):
         self.model = model
+        self.max_workers = max_workers
 
     def verify(
         self, answer: str, context_chunks: list[RetrievalResult]
     ) -> list[CitationResult]:
         claims = self._extract_claims_with_citations(answer)
-        results = []
+        if not claims:
+            return []
 
-        for citation_id, claim in claims:
+        def _verify_claim(item: tuple[int, str]) -> CitationResult:
+            citation_id, claim = item
             if citation_id < 1 or citation_id > len(context_chunks):
-                results.append(CitationResult(
+                return CitationResult(
                     citation_id=citation_id,
                     claim=claim,
                     source_chunk_id="INVALID",
                     supported=False,
-                ))
-                continue
+                )
 
             chunk = context_chunks[citation_id - 1]
             supported = self._check_support(claim, chunk.content)
-            results.append(CitationResult(
+            return CitationResult(
                 citation_id=citation_id,
                 claim=claim,
                 source_chunk_id=chunk.chunk_id,
                 supported=supported,
-            ))
+            )
+
+        workers = min(len(claims), self.max_workers)
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            results = list(executor.map(_verify_claim, claims))
 
         return results
 
@@ -71,7 +80,7 @@ class CitationVerifier:
         )
 
         try:
-            resp = httpx.post(
+            resp = _client.post(
                 f"{OLLAMA_BASE_URL}/api/generate",
                 json={
                     "model": self.model,
@@ -79,10 +88,9 @@ class CitationVerifier:
                     "stream": False,
                     "options": {"temperature": 0.0, "num_predict": 10},
                 },
-                timeout=30.0,
             )
             resp.raise_for_status()
-            verdict = resp.json()["response"].strip().upper()
+            verdict = resp.json().get("response", "").strip().upper()
             return "SUPPORTED" in verdict
         except (httpx.HTTPError, KeyError):
             return False

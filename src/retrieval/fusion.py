@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.config import RRF_DENSE_WEIGHT, RRF_SPARSE_WEIGHT, FUSION_TOP_K
+from src.config import FUSION_TOP_K, RRF_DENSE_WEIGHT, RRF_SPARSE_WEIGHT
 from src.retrieval.dense import RetrievalResult
 
 

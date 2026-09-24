@@ -1,12 +1,13 @@
+import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
 
 # Ollama
-OLLAMA_BASE_URL = "http://localhost:11434"
-EMBEDDING_MODEL = "nomic-embed-text"
-GENERATION_MODEL = "llama3:8b"
-EMBEDDING_DIMENSION = 768
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "nomic-embed-text")
+GENERATION_MODEL = os.environ.get("GENERATION_MODEL", "llama3:8b")
+EMBEDDING_DIMENSION = int(os.environ.get("EMBEDDING_DIMENSION", "768"))
 
 # ChromaDB
 CHROMA_PERSIST_DIR = str(PROJECT_ROOT / "chroma_db")

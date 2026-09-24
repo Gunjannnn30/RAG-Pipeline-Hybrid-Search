@@ -1,23 +1,25 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 from src.config import (
     DENSE_TOP_K,
-    SPARSE_TOP_K,
     FUSION_TOP_K,
+    RERANK_TOP_K,
     RRF_DENSE_WEIGHT,
     RRF_SPARSE_WEIGHT,
-    RERANK_TOP_K,
+    SPARSE_TOP_K,
 )
-from src.indexing.vector_store import VectorStore
 from src.indexing.bm25_index import BM25Index
+from src.indexing.vector_store import VectorStore
 from src.retrieval.dense import DenseRetriever, RetrievalResult
-from src.retrieval.sparse import SparseRetriever
 from src.retrieval.fusion import reciprocal_rank_fusion
 from src.retrieval.reranker import Reranker
+from src.retrieval.sparse import SparseRetriever
 
 
 class HybridRetriever:
-    """Full hybrid retrieval: dense + sparse → RRF fusion → reranker."""
+    """Full hybrid retrieval: concurrent dense + sparse → RRF fusion → parallel reranker."""
 
     def __init__(
         self,
@@ -43,8 +45,12 @@ class HybridRetriever:
     def retrieve(
         self, query: str, use_reranker: bool | None = None
     ) -> list[RetrievalResult]:
-        dense_results = self.dense.retrieve(query)
-        sparse_results = self.sparse.retrieve(query)
+        # Run dense vector search and sparse BM25 keyword search concurrently in parallel
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_dense = executor.submit(self.dense.retrieve, query)
+            future_sparse = executor.submit(self.sparse.retrieve, query)
+            dense_results = future_dense.result()
+            sparse_results = future_sparse.result()
 
         fused = reciprocal_rank_fusion(
             dense_results,

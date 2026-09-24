@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import numpy as np
 
+from src.chunking.base import BaseChunker
 from src.config import CHUNK_SIZE, SEMANTIC_SIMILARITY_THRESHOLD
 from src.models import Chunk, Document
-from src.chunking.base import BaseChunker
 
 
 class SemanticChunker(BaseChunker):

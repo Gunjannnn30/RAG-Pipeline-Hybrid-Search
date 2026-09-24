@@ -106,8 +106,7 @@ def _save_results(
     output_path: Path,
 ) -> None:
     with open(output_path / "results.jsonl", "w") as f:
-        for r in results:
-            f.write(json.dumps(asdict(r)) + "\n")
+        f.writelines(json.dumps(asdict(r)) + "\n" for r in results)
 
     with open(output_path / "summary.json", "w") as f:
         json.dump(summary, f, indent=2)

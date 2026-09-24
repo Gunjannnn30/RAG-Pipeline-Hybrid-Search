@@ -1,14 +1,12 @@
-import json
 import tempfile
-from pathlib import Path
 
-from src.evaluation.dataset import EvalDataset, EvalCase
+from src.evaluation.dataset import EvalCase, EvalDataset
 from src.evaluation.metrics import EvalMetrics, EvalResult
 from src.evaluation.run_eval import _compute_summary
-from src.retrieval.dense import RetrievalResult
 from src.generation.citations import CitationResult
-from src.generation.pipeline import GenerationResult
 from src.generation.confidence import ConfidenceScore
+from src.generation.pipeline import GenerationResult
+from src.retrieval.dense import RetrievalResult
 
 
 def _make_case(qid: str = "q1", qtype: str = "basic") -> EvalCase:

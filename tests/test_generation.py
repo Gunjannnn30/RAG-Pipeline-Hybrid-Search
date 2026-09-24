@@ -1,6 +1,6 @@
-from src.generation.citations import CitationVerifier, CitationResult
-from src.generation.confidence import ConfidenceScorer, ConfidenceScore
-from src.generation.pipeline import GenerationPipeline, GenerationResult
+from src.generation.citations import CitationResult, CitationVerifier
+from src.generation.confidence import ConfidenceScore, ConfidenceScorer
+from src.generation.pipeline import GenerationPipeline
 from src.retrieval.dense import RetrievalResult
 
 

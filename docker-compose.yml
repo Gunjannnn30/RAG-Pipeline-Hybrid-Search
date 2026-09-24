@@ -1,6 +1,8 @@
 services:
   ollama:
     image: ollama/ollama:latest
+    container_name: rag_ollama
+    restart: unless-stopped
     ports:
       - "11434:11434"
     volumes:
@@ -12,6 +14,8 @@ services:
 
   api:
     build: .
+    container_name: rag_api
+    restart: unless-stopped
     ports:
       - "8000:8000"
     volumes:
@@ -19,6 +23,9 @@ services:
       - bm25_data:/app
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
+      - GENERATION_MODEL=${GENERATION_MODEL:-llama3.2:1b}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
+      - SEED_DOCS=${SEED_DOCS:-50}
     depends_on:
       - ollama
     command: >
@@ -26,6 +33,8 @@ services:
 
   dashboard:
     build: .
+    container_name: rag_dashboard
+    restart: unless-stopped
     ports:
       - "8501:8501"
     environment:

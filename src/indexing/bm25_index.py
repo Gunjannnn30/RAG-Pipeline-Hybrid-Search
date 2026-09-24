@@ -47,6 +47,14 @@ class BM25Index:
         self.corpus = data["corpus"]
         self.bm25 = BM25Okapi(self.corpus)
 
+    def clear(self) -> None:
+        """Reset the in-memory BM25 index and remove the persisted index file."""
+        self.bm25 = None
+        self.chunk_ids = []
+        self.corpus = []
+        if self.index_path.exists():
+            self.index_path.unlink()
+
     @staticmethod
     def _tokenize(text: str) -> list[str]:
         return text.lower().split()

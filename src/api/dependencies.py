@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from src.indexing.vector_store import VectorStore
-from src.indexing.bm25_index import BM25Index
-from src.retrieval.hybrid import HybridRetriever
 from src.generation.pipeline import GenerationPipeline
+from src.indexing.bm25_index import BM25Index
+from src.indexing.vector_store import VectorStore
+from src.retrieval.hybrid import HybridRetriever
 
 
 class AppState:

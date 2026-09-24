@@ -5,8 +5,8 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
-from src.config import PROJECT_ROOT
 from src.chunking.factory import ChunkingStrategy
+from src.config import PROJECT_ROOT
 from src.evaluation.dataset import EvalDataset
 from src.evaluation.metrics import EvalMetrics, EvalResult
 from src.evaluation.run_eval import _compute_summary, _print_summary
@@ -72,8 +72,7 @@ class ChunkingComparison:
             strategy_dir = output_path / strategy.value
             strategy_dir.mkdir(exist_ok=True)
             with open(strategy_dir / "results.jsonl", "w") as f:
-                for r in results:
-                    f.write(json.dumps(asdict(r)) + "\n")
+                f.writelines(json.dumps(asdict(r)) + "\n" for r in results)
 
         # Save comparison report
         report = self._build_report(all_summaries)
@@ -140,5 +139,5 @@ class ChunkingComparison:
                 row += f" {val:>12.1%}{marker}"
             print(row)
 
-        print(f"\n  * = best for that metric")
+        print("\n  * = best for that metric")
         print(f"{'='*70}")

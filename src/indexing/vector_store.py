@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import chromadb
 
-from src.config import CHROMA_PERSIST_DIR, CHROMA_COLLECTION_NAME
+from src.config import CHROMA_COLLECTION_NAME, CHROMA_PERSIST_DIR
 from src.models import Chunk
 
 

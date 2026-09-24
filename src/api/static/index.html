@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RAG with Hybrid Search · Production Retrieval Engine</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            canvas: '#090d16',
+            surface: '#131b2e',
+            surfaceHover: '#17223b',
+            borderSubtle: '#202d45',
+            brandIndigo: '#6366f1',
+            brandCyan: '#06b6d4',
+            statusSuccess: '#10b981',
+            statusWarning: '#f59e0b',
+            statusDanger: '#f43f5e'
+          },
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- React 18 & ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <!-- Babel Standalone -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body {
+      background-color: #090d16;
+      color: #f8fafc;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: #090d16;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #202d45;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="bg-canvas text-slate-100 min-h-screen custom-scroll">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useMemo } = React;
+
+    // Toast Notification Component
+    const Toast = ({ message, type, onClose }) => {
+      useEffect(() => {
+        const timer = setTimeout(onClose, 4000);
+        return () => clearTimeout(timer);
+      }, [onClose]);
+
+      const bg = type === 'error' ? 'bg-rose-950 border-rose-700 text-rose-200' : 'bg-emerald-950 border-emerald-700 text-emerald-200';
+      return (
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg border shadow-xl ${bg} animate-bounce-in`}>
+          <span className="text-sm font-semibold">{message}</span>
+          <button onClick={onClose} className="text-slate-400 hover:text-white text-xs">✕</button>
+        </div>
+      );
+    };
+
+    // Skeleton Loader (frontend-expert: zero layout shift)
+    const AnswerSkeleton = () => (
+      <div className="bg-surface border border-borderSubtle rounded-xl p-6 animate-pulse space-y-4 my-4">
+        <div className="flex justify-between items-center">
+          <div className="h-4 bg-slate-800 rounded w-1/4"></div>
+          <div className="h-4 bg-slate-800 rounded w-1/6"></div>
+        </div>
+        <div className="space-y-2">
+          <div className="h-3.5 bg-slate-800 rounded w-full"></div>
+          <div className="h-3.5 bg-slate-800 rounded w-5/6"></div>
+          <div className="h-3.5 bg-slate-800 rounded w-4/6"></div>
+        </div>
+        <div className="grid grid-cols-4 gap-3 pt-4 border-t border-borderSubtle">
+          {[1,2,3,4].map(i => (
+            <div key={i} className="h-14 bg-slate-800/60 rounded-lg"></div>
+          ))}
+        </div>
+      </div>
+    );
+
+    function App() {
+      const [activeTab, setActiveTab] = useState('qa');
+      const [health, setHealth] = useState({ indexed_chunks: 0, ollama_available: false });
+      const [toast, setToast] = useState(null);
+
+      // Search State
+      const [query, setQuery] = useState('');
+      const [retrievalMode, setRetrievalMode] = useState('hybrid');
+      const [useReranker, setUseReranker] = useState(false);
+      const [denseWeight, setDenseWeight] = useState(0.7);
+      const [sparseWeight, setSparseWeight] = useState(0.3);
+      const [loading, setLoading] = useState(false);
+      const [result, setResult] = useState(null);
+
+      // Upload State
+      const [files, setFiles] = useState([]);
+      const [chunkStrat, setChunkStrat] = useState('recursive');
+      const [uploading, setUploading] = useState(false);
+
+      // Documents State
+      const [documents, setDocuments] = useState([]);
+
+      const fetchHealth = useCallback(async () => {
+        try {
+          const res = await fetch('/health');
+          if (res.ok) {
+            const data = await res.json();
+            setHealth(data);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }, []);
+
+      const fetchDocuments = useCallback(async () => {
+        try {
+          const res = await fetch('/v1/documents');
+          if (res.ok) {
+            const data = await res.json();
+            setDocuments(data.documents || []);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }, []);
+
+      useEffect(() => {
+        fetchHealth();
+        fetchDocuments();
+      }, [fetchHealth, fetchDocuments]);
+
+      // Handle Ask
+      const handleAsk = useCallback(async (q) => {
+        const queryText = q || query;
+        if (!queryText.trim()) return;
+        setLoading(true);
+        setResult(null);
+
+        try {
+          const t0 = performance.now();
+          const res = await fetch('/v1/ask', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question: queryText,
+              retrieval_mode: retrievalMode,
+              use_reranker: useReranker,
+              dense_weight: denseWeight,
+              sparse_weight: sparseWeight,
+            })
+          });
+
+          const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
+          if (res.ok) {
+            const data = await res.json();
+            setResult({ ...data, elapsed });
+          } else {
+            const err = await res.text();
+            setToast({ message: `Search failed: ${err}`, type: 'error' });
+          }
+        } catch (e) {
+          setToast({ message: `Network error: ${e.message}`, type: 'error' });
+        } finally {
+          setLoading(false);
+        }
+      }, [query, retrievalMode, useReranker, denseWeight, sparseWeight]);
+
+      // Handle Upload
+      const handleUpload = useCallback(async () => {
+        if (!files.length) return;
+        setUploading(true);
+
+        const formData = new FormData();
+        Array.from(files).forEach(f => formData.append('files', f));
+        formData.append('chunking_strategy', chunkStrat);
+
+        try {
+          const res = await fetch('/v1/upload', {
+            method: 'POST',
+            body: formData
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            setToast({ message: `Indexed ${data.documents} files into ${data.chunks_indexed} chunks!`, type: 'success' });
+            setFiles([]);
+            fetchHealth();
+            fetchDocuments();
+          } else {
+            const err = await res.text();
+            setToast({ message: `Upload failed: ${err}`, type: 'error' });
+          }
+        } catch (e) {
+          setToast({ message: `Upload failed: ${e.message}`, type: 'error' });
+        } finally {
+          setUploading(false);
+        }
+      }, [files, chunkStrat, fetchHealth, fetchDocuments]);
+
+      return (
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+          {/* Top Telemetry Header */}
+          <header className="bg-gradient-to-r from-surface to-slate-900 border border-borderSubtle rounded-2xl p-6 mb-6 shadow-2xl flex flex-wrap justify-between items-center gap-4">
+            <div>
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">⚡</span>
+                <h1 className="text-2xl font-extrabold bg-gradient-to-r from-cyan-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent">
+                  RAG with Hybrid Search
+                </h1>
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
+                  v1.0 Local Offline
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1 font-medium">
+                Dual Dense Vector + BM25 Keyword Hybrid Search · Parallel Cross-Encoder Reranker · Factual Citation Verification
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold border flex items-center gap-1.5 ${
+                health.ollama_available ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${health.ollama_available ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`}></span>
+                {health.ollama_available ? 'Ollama Active' : 'Ollama Offline'}
+              </span>
+
+              <span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-800/80 text-slate-300 border border-borderSubtle">
+                ChromaDB Cosine
+              </span>
+
+              <span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-800/80 text-slate-300 border border-borderSubtle">
+                BM25Okapi
+              </span>
+
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-950 text-indigo-300 border border-indigo-700/50">
+                📚 {health.indexed_chunks.toLocaleString()} Chunks
+              </span>
+            </div>
+          </header>
+
+          {/* Main Layout Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Sidebar Controls */}
+            <aside className="lg:col-span-1 space-y-5">
+              <div className="bg-surface border border-borderSubtle rounded-xl p-5 shadow-lg space-y-4">
+                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                  <span>🎛️</span> Retrieval Config
+                </h2>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-slate-300">Search Strategy</label>
+                  <div className="grid grid-cols-3 gap-1 p-1 bg-slate-900 rounded-lg border border-borderSubtle text-xs">
+                    {['hybrid', 'dense', 'sparse'].map(mode => (
+                      <button
+                        key={mode}
+                        onClick={() => setRetrievalMode(mode)}
+                        className={`py-1.5 rounded-md font-semibold capitalize transition ${
+                          retrievalMode === mode ? 'bg-brandIndigo text-white shadow' : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-xs font-semibold text-slate-300">Cross-Encoder Reranker</span>
+                  <input
+                    type="checkbox"
+                    checked={useReranker}
+                    onChange={e => setUseReranker(e.target.checked)}
+                    className="w-4 h-4 accent-indigo-600 rounded cursor-pointer"
+                  />
+                </div>
+
+                {retrievalMode === 'hybrid' && (
+                  <div className="space-y-3 pt-3 border-t border-borderSubtle">
+                    <div className="flex justify-between text-xs text-slate-300">
+                      <span>Dense Weight (Vectors)</span>
+                      <span className="font-mono text-cyan-400">{denseWeight}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={denseWeight}
+                      onChange={e => setDenseWeight(parseFloat(e.target.value))}
+                      className="w-full accent-cyan-500"
+                    />
+
+                    <div className="flex justify-between text-xs text-slate-300">
+                      <span>Sparse Weight (BM25)</span>
+                      <span className="font-mono text-indigo-400">{sparseWeight}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={sparseWeight}
+                      onChange={e => setSparseWeight(parseFloat(e.target.value))}
+                      className="w-full accent-indigo-500"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Navigation Tabs (Sidebar Pill Menu) */}
+              <nav className="bg-surface border border-borderSubtle rounded-xl p-2 space-y-1">
+                {[
+                  { id: 'qa', label: '💬 Search & Grounded Q&A' },
+                  { id: 'upload', label: '📤 Document Ingestion' },
+                  { id: 'docs', label: '📚 Document Repository' }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`w-full text-left px-3.5 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between transition ${
+                      activeTab === tab.id ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    {activeTab === tab.id && <span className="text-cyan-400">●</span>}
+                  </button>
+                ))}
+              </nav>
+
+              <div className="text-[11px] text-slate-500 px-2 space-y-1">
+                <p>• Embeddings: <code className="text-slate-400">nomic-embed-text</code></p>
+                <p>• LLM: <code className="text-slate-400">llama3.2:1b (local)</code></p>
+                <p>• Streamlit Studio: <a href="http://localhost:8501" target="_blank" className="text-cyan-400 underline">port 8501</a></p>
+              </div>
+            </aside>
+
+            {/* Content Area */}
+            <main className="lg:col-span-3 space-y-6">
+              {/* TAB 1: Search & Grounded Q&A */}
+              {activeTab === 'qa' && (
+                <div className="space-y-6">
+                  {/* Query Starters */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">💡 Quick Starters:</span>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { label: '⚡ Deployment & Rate Limits', q: 'What are the deployment guidelines and rate limits?' },
+                        { label: '📄 Confluence Documentation Rules', q: 'What information is described in Confluence documents?' },
+                        { label: '❓ Out-of-Scope Fallback Test', q: 'What is the recipe for baking chocolate cake?' }
+                      ].map((item, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => { setQuery(item.q); handleAsk(item.q); }}
+                          className="px-3 py-1.5 rounded-lg bg-surface border border-borderSubtle text-xs text-slate-300 hover:border-indigo-500 hover:text-white transition"
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Search Input Bar */}
+                  <div className="bg-surface border border-borderSubtle rounded-xl p-2 flex items-center gap-3 shadow-lg focus-within:border-indigo-500 transition">
+                    <span className="pl-3 text-slate-400">🔍</span>
+                    <input
+                      type="text"
+                      value={query}
+                      onChange={e => setQuery(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleAsk()}
+                      placeholder="Ask any question across your indexed docs..."
+                      className="w-full bg-transparent text-sm text-slate-100 placeholder-slate-500 outline-none"
+                    />
+                    <button
+                      onClick={() => handleAsk()}
+                      disabled={loading || !query.trim()}
+                      className="px-5 py-2 rounded-lg bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white text-xs font-bold shadow-md transition disabled:opacity-50"
+                    >
+                      {loading ? 'Searching...' : 'Search'}
+                    </button>
+                  </div>
+
+                  {/* Answer Presentation */}
+                  {loading && <AnswerSkeleton />}
+
+                  {result && (
+                    <div className="space-y-5 animate-fade-in">
+                      {/* Grounded Answer Card */}
+                      <div className={`bg-surface border rounded-xl p-6 shadow-xl ${
+                        result.is_confident ? 'border-borderSubtle border-l-4 border-l-emerald-500' : 'border-amber-500/40 bg-amber-500/5 border-l-4 border-l-amber-500'
+                      }`}>
+                        <div className="flex justify-between items-center pb-3 border-b border-borderSubtle mb-4">
+                          <span className={`text-xs font-bold uppercase tracking-wider ${result.is_confident ? 'text-emerald-400' : 'text-amber-400'}`}>
+                            ● {result.is_confident ? 'Verified Grounded Answer' : 'Low-Confidence Abstention'}
+                          </span>
+                          <span className="text-xs text-slate-400">
+                            ⏱️ {result.elapsed}s · Mode: <code className="text-cyan-400">{retrievalMode}</code>
+                          </span>
+                        </div>
+
+                        <p className="text-sm leading-relaxed text-slate-200 whitespace-pre-wrap">
+                          {result.answer}
+                        </p>
+
+                        {!result.is_confident && (
+                          <div className="mt-4 p-3 rounded-lg bg-amber-950/40 border border-amber-800/40 text-xs text-amber-200">
+                            ⚠️ <b>Safety Abstention:</b> Retrieval confidence did not meet verification criteria. The model declined to guess.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 3D Confidence Score Grid */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {[
+                          { label: 'Composite Score', val: result.confidence.composite, color: 'text-indigo-400' },
+                          { label: 'Retrieval Relevance', val: result.confidence.retrieval_confidence, color: 'text-cyan-400' },
+                          { label: 'Citation Coverage', val: result.confidence.citation_coverage, color: 'text-emerald-400' },
+                          { label: 'Answer Completeness', val: result.confidence.answer_completeness, color: 'text-purple-400' }
+                        ].map((m, idx) => (
+                          <div key={idx} className="bg-surface border border-borderSubtle rounded-xl p-4">
+                            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{m.label}</span>
+                            <div className={`text-2xl font-extrabold mt-1 ${m.color}`}>
+                              {(m.val * 100).toFixed(1)}%
+                            </div>
+                            <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+                              <div className="bg-gradient-to-r from-indigo-500 to-cyan-400 h-full rounded-full" style={{ width: `${Math.min(Math.max(m.val, 0), 1) * 100}%` }}></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Verified Citations */}
+                      {result.citations && result.citations.length > 0 && (
+                        <div className="space-y-3">
+                          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                            🛡️ Verified Inline Citations ({result.citations.length})
+                          </h3>
+                          <div className="space-y-2">
+                            {result.citations.map((c, idx) => (
+                              <div key={idx} className={`p-4 rounded-xl border bg-surface ${
+                                c.supported ? 'border-emerald-500/40 border-l-4 border-l-emerald-500' : 'border-rose-500/40 border-l-4 border-l-rose-500'
+                              }`}>
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className={`text-xs font-bold ${c.supported ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    [{c.citation_id}] {c.supported ? 'VERIFIED FACTUAL CLAIM' : 'UNSUPPORTED CLAIM'}
+                                  </span>
+                                  <code className="text-[11px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
+                                    {c.source_chunk_id}
+                                  </code>
+                                </div>
+                                <p className="text-xs text-slate-300 italic">"{c.claim}"</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Context Chunks Inspector */}
+                      {result.context_chunks && (
+                        <details className="bg-surface border border-borderSubtle rounded-xl p-4 text-xs">
+                          <summary className="font-semibold text-slate-300 cursor-pointer hover:text-white">
+                            📑 Retrieved Context Passages ({result.context_chunks.length} chunks used)
+                          </summary>
+                          <div className="mt-4 space-y-3">
+                            {result.context_chunks.map((chk, i) => (
+                              <div key={i} className="p-3 bg-slate-900/80 rounded-lg border border-borderSubtle">
+                                <div className="flex justify-between text-slate-400 mb-2 font-mono text-[11px]">
+                                  <span>[{i+1}] {chk.metadata?.title || 'Passage'}</span>
+                                  <span className="text-cyan-400">Score: {chk.score.toFixed(4)}</span>
+                                </div>
+                                <pre className="text-slate-300 text-[11px] whitespace-pre-wrap font-mono">{chk.content}</pre>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 2: Upload Documents */}
+              {activeTab === 'upload' && (
+                <div className="bg-surface border border-borderSubtle rounded-2xl p-6 space-y-6">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-100">📤 Ingest Knowledge into Vector & Keyword Indexes</h2>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Upload PDF, Markdown, Plain Text, or HTML files. Embeddings are generated offline with Ollama <code className="text-cyan-400">nomic-embed-text</code>.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="md:col-span-2 border-2 border-dashed border-borderSubtle hover:border-indigo-500 rounded-xl p-8 text-center transition">
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf,.md,.txt,.html,.htm"
+                        onChange={e => setFiles(e.target.files)}
+                        className="hidden"
+                        id="file-upload"
+                      />
+                      <label htmlFor="file-upload" className="cursor-pointer space-y-2 block">
+                        <span className="text-3xl block">📄</span>
+                        <span className="text-sm font-semibold text-indigo-400">Click to select files</span>
+                        <span className="text-xs text-slate-400 block">PDF, Markdown (.md), Plaintext (.txt), HTML</span>
+                      </label>
+                      {files.length > 0 && (
+                        <div className="mt-4 text-xs text-slate-300">
+                          Selected {files.length} file(s): {Array.from(files).map(f => f.name).join(', ')}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-xs font-semibold text-slate-300">Chunking Strategy</label>
+                      {['recursive', 'fixed_size', 'semantic'].map(st => (
+                        <button
+                          key={st}
+                          onClick={() => setChunkStrat(st)}
+                          className={`w-full text-left p-3 rounded-lg border text-xs transition ${
+                            chunkStrat === st ? 'bg-indigo-600/20 border-indigo-500 text-white font-semibold' : 'bg-slate-900 border-borderSubtle text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <div className="capitalize">{st.replace('_', ' ')}</div>
+                          <div className="text-[10px] text-slate-500 mt-0.5">
+                            {st === 'recursive' ? 'Header-aware splitting' : st === 'fixed_size' ? 'Fixed token windows' : 'Embedding dropoffs'}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleUpload}
+                    disabled={uploading || !files.length}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-bold text-xs shadow-lg transition disabled:opacity-50"
+                  >
+                    {uploading ? 'Processing & Dual-Indexing...' : '🚀 Dual-Index Uploaded Documents'}
+                  </button>
+                </div>
+              )}
+
+              {/* TAB 3: Document Repository */}
+              {activeTab === 'docs' && (
+                <div className="bg-surface border border-borderSubtle rounded-2xl p-6 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-lg font-bold text-slate-100">📚 Indexed Document Library</h2>
+                    <span className="text-xs text-slate-400">Total: {documents.length} docs</span>
+                  </div>
+
+                  {documents.length === 0 ? (
+                    <div className="text-center py-10 text-slate-500 text-xs">
+                      No documents currently indexed. Go to Document Ingestion to add files.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs text-slate-300">
+                        <thead className="bg-slate-900/60 text-slate-400 uppercase tracking-wider text-[10px] border-b border-borderSubtle">
+                          <tr>
+                            <th className="p-3">Doc ID</th>
+                            <th className="p-3">Title</th>
+                            <th className="p-3">Format</th>
+                            <th className="p-3">Size (Chars)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-borderSubtle">
+                          {documents.map((d, i) => (
+                            <tr key={i} className="hover:bg-slate-800/40 transition">
+                              <td className="p-3 font-mono text-cyan-400">{d.doc_id}</td>
+                              <td className="p-3 font-medium text-slate-200">{d.title || 'Untitled'}</td>
+                              <td className="p-3 uppercase text-[10px] text-slate-400">{d.source_type}</td>
+                              <td className="p-3 font-mono text-slate-400">{d.char_count?.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </main>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
