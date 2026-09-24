@@ -18,19 +18,29 @@
 Below are interface captures demonstrating the primary components of the system in operation.
 
 ### 1. Streamlit Enterprise Studio
-![Streamlit Enterprise Studio](docs/assets/demo_streamlit_studio.png)
+<img width="1905" height="722" alt="image" src="https://github.com/user-attachments/assets/a9b0cc30-50ba-4cdb-8638-df8e7fa1e069" />
+
 *Figure 1: Streamlit Enterprise Studio featuring dual hybrid retrieval controls, Obsidian Slate interface styling, and real-time backend cluster telemetry.*
 
 ### 2. Automated Citation Verification & Confidence Telemetry
-![Citation Verification](docs/assets/demo_citations.png)
+<img width="1488" height="851" alt="Screenshot 2026-09-24 150945" src="https://github.com/user-attachments/assets/6115e1f6-1a3f-4f03-9a8d-e9e83610ba0f" />
+
+<img width="1472" height="680" alt="Screenshot 2026-09-24 151102" src="https://github.com/user-attachments/assets/2fe2e7f1-7172-4e5c-b114-2e9bfb52a469" />
+
+<img width="1372" height="717" alt="Screenshot 2026-09-24 151155" src="https://github.com/user-attachments/assets/b7c75e06-f885-4d0c-aa0b-7abd12a9911e" />
+
 *Figure 2: Grounded generation inspector displaying line-by-line citation verification, NLI entailment audits, and 3D confidence breakdown.*
 
-### 3. Zero-Dependency React 18 Single-Page Application
-![React 18 SPA](docs/assets/demo_react_spa.png)
-*Figure 3: Zero-install React 18 client served directly via FastAPI with skeleton loading states, telemetry status badges, and query history.*
+### 3. Side-by-Side: Hybrid Search (RRF) vs. Pure Dense Vectors
+<img width="1387" height="720" alt="image" src="https://github.com/user-attachments/assets/36d5f065-8785-4b65-a587-f62df0e422aa" />
+
+<img width="1482" height="807" alt="Screenshot 2026-09-24 151616" src="https://github.com/user-attachments/assets/16a00495-b20d-4b91-a40c-5976a0be845b" />
+
+*Figure 3: Compare how combining dense semantic embeddings with sparse BM25 keyword matching fixes semantic drift, catches exact function names and identifiers, and improves factual retrieval confidence.*
 
 ### 4. Document Ingestion & Chunking Studio
-![Document Ingestion](docs/assets/demo_ingestion.png)
+<img width="1446" height="772" alt="Screenshot 2026-09-24 151236" src="https://github.com/user-attachments/assets/2973997b-7a29-45ba-8d7c-0ec602b65728" />
+
 *Figure 4: Ingestion interface supporting multi-format document uploads (PDF, Markdown, TXT, HTML) with adaptive chunking strategy selection.*
 
 ---
