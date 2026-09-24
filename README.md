@@ -594,8 +594,8 @@ The platform provides two complementary frontends:
 
 ### 1. Clone & Install
 ```bash
-git clone https://github.com/Gunjannnn30/RAG-Pipeline-with-Hybrid-Search.git
-cd RAG-Pipeline-with-Hybrid-Search
+git clone https://github.com/Gunjannnn30/RAG-Pipeline-Hybrid-Search.git
+cd RAG-Pipeline-Hybrid-Search
 
 pip install -e ".[dev]"
 pip install streamlit pymupdf python-multipart

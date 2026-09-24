@@ -71,8 +71,8 @@ docker compose version
 
 ### Step 3: Clone the Repository
 ```bash
-git clone https://github.com/Gunjannnn30/RAG-Pipeline-with-Hybrid-Search.git
-cd RAG-Pipeline-with-Hybrid-Search
+git clone https://github.com/Gunjannnn30/RAG-Pipeline-Hybrid-Search.git
+cd RAG-Pipeline-Hybrid-Search
 ```
 
 ### Step 4: Configure & Launch with Docker Compose
@@ -153,8 +153,8 @@ For high-throughput enterprise deployments where you want **sub-second inference
    ollama pull llama3:8b
 
    # Clone and run
-   git clone https://github.com/Gunjannnn30/RAG-Pipeline-with-Hybrid-Search.git
-   cd RAG-Pipeline-with-Hybrid-Search
+   git clone https://github.com/Gunjannnn30/RAG-Pipeline-Hybrid-Search.git
+   cd RAG-Pipeline-Hybrid-Search
    pip install -e ".[dev]"
    pip install streamlit
 
