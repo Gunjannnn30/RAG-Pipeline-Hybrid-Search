@@ -1,10 +1,10 @@
-# Deploying RAG with Hybrid Search Online 🌐
+# Deploying RAG with Hybrid Search Online
 
 This guide covers all options for taking your **RAG with Hybrid Search** platform online — from a **60-second instant free tunnel** to **production Cloud VPS** and **GPU deployment**.
 
 ---
 
-## 🏗️ Architecture Requirements
+## Architecture Requirements
 
 Because this pipeline uses **local offline LLMs** (Ollama + `nomic-embed-text` + `llama3.2:1b` / `llama3:8b`), it requires a container or VM with sufficient memory:
 
@@ -17,7 +17,7 @@ Because this pipeline uses **local offline LLMs** (Ollama + `nomic-embed-text` +
 
 ---
 
-## ⚡ Method 1: Instant 60-Second Public Sharing (Free & No Server Setup)
+## Method 1: Outbound Secure Tunneling (No Inbound Firewall Setup)
 
 If you already have the pipeline running on your machine and want to share a live public HTTPS link with anyone in the world immediately:
 
@@ -46,7 +46,7 @@ If you already have the pipeline running on your machine and want to share a liv
 
 ---
 
-## ☁️ Method 2: Production Cloud VPS with Docker Compose (Recommended for 24/7)
+## Method 2: Production Cloud VPS with Docker Compose
 
 Deploy on any standard cloud Linux server (**DigitalOcean Droplet**, **Hetzner Cloud CX31/CX41**, **AWS EC2 t3.large**, **GCP e2-standard-2**, or **Linode**).
 
@@ -71,8 +71,8 @@ docker compose version
 
 ### Step 3: Clone the Repository
 ```bash
-git clone https://github.com/ujjwalredd/RAG-Pipeline.git
-cd RAG-Pipeline
+git clone https://github.com/Gunjannnn30/RAG-Pipeline-with-Hybrid-Search.git
+cd RAG-Pipeline-with-Hybrid-Search
 ```
 
 ### Step 4: Configure & Launch with Docker Compose
@@ -106,7 +106,7 @@ You can now visit your server's IP address:
 
 ---
 
-## 🔒 Method 3: Add Custom Domain with Free SSL (Caddy Reverse Proxy)
+## Method 3: Add Custom Domain with Free SSL (Caddy Reverse Proxy)
 
 To map a clean domain (like `rag.yourcompany.com`) with automatic HTTPS:
 
@@ -136,7 +136,7 @@ Caddy will automatically provision a free Let's Encrypt SSL certificate!
 
 ---
 
-## 🚀 Method 4: Cloud GPU Deployment (RunPod / Vast.ai / Lambda)
+## Method 4: Cloud GPU Deployment (RunPod / Vast.ai / Lambda)
 
 For high-throughput enterprise deployments where you want **sub-second inference and reranking**:
 
@@ -153,8 +153,8 @@ For high-throughput enterprise deployments where you want **sub-second inference
    ollama pull llama3:8b
 
    # Clone and run
-   git clone https://github.com/ujjwalredd/RAG-Pipeline.git
-   cd RAG-Pipeline
+   git clone https://github.com/Gunjannnn30/RAG-Pipeline-with-Hybrid-Search.git
+   cd RAG-Pipeline-with-Hybrid-Search
    pip install -e ".[dev]"
    pip install streamlit
 
@@ -166,7 +166,7 @@ For high-throughput enterprise deployments where you want **sub-second inference
 
 ---
 
-## 🛡️ Production Checklist
+## Production Deployment Checklist
 
 - [x] **Model Weights Cached**: Ensure the `ollama_data` volume is mounted so model weights aren't re-downloaded on container restart.
 - [x] **CORS Configuration**: If embedding the React SPA on an external website, set `allow_origins=["*"]` or specify your domain in `src/api/main.py`.
